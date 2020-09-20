@@ -18,10 +18,25 @@ public class Main {
 //            e.printStackTrace();
 //        }
 
+        /*
+         * @Description: TCP协议
+         * @Author: pongshy
+         * @createTime: 2020/9/17 19:31
+         */
+//        new Thread(() -> {
+//            GUI gui = new GUI();
+//            gui.setVisible(true);
+//        }).start();
 
+
+        /*
+         * @Description: UDP协议客户端
+         * @Author: pongshy
+         * @createTime: 2020/9/17 22:22
+         */
         new Thread(() -> {
-            GUI gui = new GUI();
-            gui.setVisible(true);
+            UDP udp = new UDP();
+            udp.setVisible(true);
         }).start();
     }
 }

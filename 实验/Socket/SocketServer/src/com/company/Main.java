@@ -23,9 +23,25 @@ public class Main {
 //            e.printStackTrace();
 //        }
 
-        new Thread(()->{
-            ServerGUI serverGUI = new ServerGUI();
-            serverGUI.setVisible(true);
+        /*
+         * @Description: TCP协议服务端
+         * @Author: pongshy
+         * @createTime: 2020/9/17 20:02
+         */
+//        new Thread(()->{
+//            ServerGUI serverGUI = new ServerGUI();
+//            serverGUI.setVisible(true);
+//        }).start();
+
+        /*
+         * @Description: UDP协议服务端
+         * @Author: pongshy
+         * @createTime: 2020/9/17 19:38
+         */
+        new Thread(() -> {
+            UDPSocket udpSocket = new UDPSocket();
+            udpSocket.setVisible(true);
         }).start();
+
     }
 }

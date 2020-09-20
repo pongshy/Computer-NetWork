@@ -1,46 +1,43 @@
 package com.company;
 
-import com.sun.xml.internal.bind.v2.TODO;
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.List;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.*;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.*;
+import java.net.*;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @Author: pongshy
- * @Date: 2020/9/14 21:47
+ * @Date: 2020/9/17 19:32
  * @Description:
  **/
-public class ServerGUI extends JFrame {
+public class UDPSocket extends JFrame {
+
     private JPanel jPanel;
     private JTextField textField;
     private JTextField stopField;   // 所要强制下线的用户
     private JTextArea txtMsg;
 //    private JTextField message;
 
-    private OutputStream outputStream;
-    private InputStream inputStream;
 
-    ServerSocket serverSocket;
-    private static Map<String, Socket> socketMap = new ConcurrentHashMap<>();
+    DatagramSocket datagramSocket;
+    private static Map<String, DatagramPacket> dataPacketMap = new ConcurrentHashMap<>();
     private static Map<String, String> userAndPassword = new ConcurrentHashMap<>();
-    private static ArrayList<Socket> socketArrayList = new ArrayList<>();
+    private static ArrayList<DatagramPacket> dataPacketArrayList = new ArrayList<>();
     private Socket socket;
     private String name;
 
     private JTextArea userMsg;
     private JTextField deleteMsg;
 
-    public ServerGUI() {
+    public UDPSocket() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setBounds(100, 100, 820, 600);
         jPanel = new JPanel();
@@ -85,22 +82,23 @@ public class ServerGUI extends JFrame {
         jPanel1.add(stopButton);
         stopButton.addActionListener(e -> {
             String tmpName = stopField.getText();
-            if (tmpName != null && socketMap.containsKey(tmpName)) {
-                Socket stopSocket = socketMap.get(tmpName);
+            if (tmpName != null && dataPacketMap.containsKey(tmpName)) {
+                DatagramPacket tmpPacket = dataPacketMap.get(tmpName);
 
                 try {
-                    BufferedWriter tmpBw = new BufferedWriter(
-                            new OutputStreamWriter(stopSocket.getOutputStream())
+                    byte[] tmpStr = "ForceQuit".getBytes();
+                    int port = tmpPacket.getPort();
+                    DatagramPacket tmp = new DatagramPacket(
+                            tmpStr,
+                            tmpStr.length,
+                            InetAddress.getByName(tmpPacket.getAddress().getHostAddress()),
+                            port
                     );
-
-                    tmpBw.write("ForceQuit");
-                    tmpBw.flush();
-                    tmpBw.close();
+                    datagramSocket.send(tmp);
 
                     // 从正在运行的socket列表中移除
-                    socketMap.remove(tmpName);
-                    socketArrayList.remove(tmpName);
-                    stopSocket.close();
+                    dataPacketMap.remove(tmpName);
+                    dataPacketArrayList.remove(tmpName);
 
                     //更新用户列表
                     updateUserMsg();
@@ -120,7 +118,7 @@ public class ServerGUI extends JFrame {
         button.addActionListener(e -> {
             int port = Integer.parseInt(textField.getText());
             try {
-                serverSocket = new ServerSocket(port);
+                datagramSocket = new DatagramSocket(port);
 //                txtMsg.append("服务器已启动...\n" + "启动时间: " + new Date() + "\n");
                 txtMsg.append(DateUtils.getNowTime() + " 服务器已启动...\n");
                 txtMsg.append(DateUtils.getNowTime() + " 等待用户连接....\n");
@@ -129,32 +127,11 @@ public class ServerGUI extends JFrame {
                 new Thread(() -> {
                     try {
                         updateUserMsg();
-                        while (true) {
-                            if (serverSocket.isClosed()) {
-                                break;
-                            }
-                            socket = serverSocket.accept();
-                            txtMsg.append(DateUtils.getNowTime() + " " + socket.getRemoteSocketAddress() + "连接成功...\n");
-                            new Server_Thread(socket).start();
-                            socketArrayList.add(socket);
-                        }
+                        new UDPSocket.Server_Thread().start();
                     } catch (Exception ex) {
                         ex.printStackTrace();
-                        if (serverSocket.isClosed()) {
+                        if (datagramSocket.isClosed()) {
                             System.out.println("已关闭serverSocket");
-                            // TODO: 关闭所有线程
-//                            ThreadGroup currentGroup = Thread.currentThread().getThreadGroup();
-//                            int nowThreads = currentGroup.activeCount();
-//
-//                            Thread[] listThreads = new Thread[nowThreads];
-//                            currentGroup.enumerate(listThreads);
-//                            System.out.println("现有线程数: " + nowThreads);
-//                            for (int i = 0; i < nowThreads; ++i) {
-//                                String nm = listThreads[i].getName();
-//                                System.out.println("线程号: " + i + " = " + nm);
-//                                listThreads[i].interrupt();
-//                            }
-
                         }
                     }
                 }).start();
@@ -172,31 +149,23 @@ public class ServerGUI extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 try {
-//                    socket.close();
-                    //TODO: 关闭所有socket
                     //TODO: 向所有在线用户发送服务器关闭通知
-                    for (Socket tmpSocket : socketArrayList) {
-                        if (!tmpSocket.isClosed()) {
-                            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(tmpSocket.getOutputStream()));
-                            bufferedWriter.write("quit\n");
-                            bufferedWriter.flush();
-                            tmpSocket.close();
-                        }
+                    for (DatagramPacket tmpPacket : dataPacketArrayList) {
+                        byte[] tmp = "quit".getBytes();
+                        int port = tmpPacket.getPort();
+                        DatagramPacket packetTmp = new DatagramPacket(
+                                tmp,
+                                tmp.length,
+                                InetAddress.getByName(tmpPacket.getAddress().getHostAddress()),
+                                port
+                                );
+                        datagramSocket.send(packetTmp);
                     }
-//                    for (Map.Entry<String, Socket> tmp : socketMap.entrySet()) {
-//                        Socket closeScoket = tmp.getValue();
-//
-//                        BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(closeScoket.getOutputStream()));
-//                        bufferedWriter.write("quit\n");
-//                        bufferedWriter.flush();
-//                        closeScoket.close();
-//                    }
-                    socketMap.clear();
-                    socketArrayList.clear();
-//                    outputStream.close();
-//                    inputStream.close();
+                    dataPacketMap.clear();
+                    dataPacketArrayList.clear();
+
                     System.out.println("socket关闭");
-                    serverSocket.close();
+                    datagramSocket.close();
                     txtMsg.append(DateUtils.getNowTime() + " 连接已断开...." + "\n");
                     txtMsg.append(DateUtils.getNowTime() + " 服务器关闭...\n");
                     jLabel2.setText("停止");
@@ -245,11 +214,11 @@ public class ServerGUI extends JFrame {
         for (Map.Entry<String, String> entry : userAndPassword.entrySet()) {
             String username = entry.getKey();
 
-            if (socketMap.containsKey(username)) {
+            if (dataPacketMap.containsKey(username)) {
                 userMsg.append("username: " + username
                         + " password: " + entry.getValue()
                         + " 在线 "
-                        + " host: " + socketMap.get(username).getRemoteSocketAddress()
+                        + " host: " + dataPacketMap.get(username).getAddress().getHostAddress()
                         + "\n");
             } else {
                 userMsg.append("username: " + username + " password: " + entry.getValue() + " 离线\n");
@@ -259,31 +228,36 @@ public class ServerGUI extends JFrame {
 
 
     private class Server_Thread extends Thread {
-        private Socket client;
+        private DatagramPacket packet;
         private String username;
         private BufferedReader br;
         private BufferedWriter bw;
 
-        public Server_Thread(Socket socket) {
-            this.client = socket;
+        public Server_Thread() {
+
         }
 
         @Override
         public void run() {
             try {
-                inputStream = this.client.getInputStream();
-                outputStream =  this.client.getOutputStream();
-
-                bw = new BufferedWriter(new OutputStreamWriter(outputStream));
-                br = new BufferedReader(new InputStreamReader(inputStream));
 //                txtMsg.append("连接成功" + this.client.getRemoteSocketAddress() + "\n");
-                sendMsg( "连接成功", this.client);
-                sendMsg("请先登录或是注册", this.client);
+//                sendMsg( "连接成功", this.client);
+//                sendMsg("请先登录或是注册", this.client);
 
                 while (true) {
                     updateUserMsg();
 
-                    String msg = br.readLine();
+                    byte[] getMsg = new byte[1024];
+                    DatagramPacket packet = new DatagramPacket(getMsg, getMsg.length);
+
+                    datagramSocket.receive(packet);
+                    this.packet = packet;
+
+                    if (!dataPacketArrayList.contains(packet)) {
+                        dataPacketArrayList.add(packet);
+                    }
+
+                    String msg = new String(packet.getData(), 0, packet.getData().length);
                     String[] elements = null;
                     try {
                         elements = msg.split(" ");
@@ -291,7 +265,7 @@ public class ServerGUI extends JFrame {
                         if (this.username != null) {
                             txtMsg.append(DateUtils.getNowTime() + " " + this.username + "下线了" + "\n");
                         } else {
-                            txtMsg.append(DateUtils.getNowTime() + " " + this.client.getRemoteSocketAddress() + "下线了\n");
+                            txtMsg.append(DateUtils.getNowTime() + " " + this.packet.getAddress().getHostAddress() + "下线了\n");
                         }
                         break;
                     }
@@ -300,79 +274,114 @@ public class ServerGUI extends JFrame {
                         continue;
                     }
                     if ("login".equals(elements[0]) && elements.length == 3) {
-                        login(elements[1], elements[2]);
+                        login(elements[1], elements[2], this.packet);
                         continue;
                     }
-                    if (this.username == null || "".equals(username)) {
-                        sendMsg("请您先登录或是注册", this.client);
+                    String[] msgElements = msg.split(":");
+                    if (msgElements.length < 2 || (msgElements.length == 2 && !dataPacketMap.containsKey(msgElements[0]))|| (elements.length == 3 && !dataPacketMap.containsKey(elements[1]))) {
+                        sendMsg("请您先登录或是注册", this.packet);
                         continue;
                     }
                     // 用户退出连接
-                    if ("quit".equals(msg)) {
-                        socketMap.remove(this.username);
-                        txtMsg.append(DateUtils.getNowTime()+ " 用户: " + this.username + " " + this.client.getRemoteSocketAddress() + "退出连接\n");
+                    if (msg.contains("quit")) {
+                        String[] tmpElements = msg.split(":");
+                        dataPacketMap.remove(tmpElements[0]);
+                        txtMsg.append(DateUtils.getNowTime() + " " + elements[0] + this.packet.getAddress().getHostAddress() + "退出连接\n");
                         updateUserMsg();
-                        this.client.close();
-                        break;
+                        continue;
                     }
-                    txtMsg.append(DateUtils.getNowTime() + " " + this.username + ": " + msg + "\n");
+                    txtMsg.append(DateUtils.getNowTime() + " " + msg + "\n");
 //                    System.out.println(this.username + ": "+ msg);
                     groupChat(msg);
 
                 }
 
-            } catch (IOException ex) {
+            } catch (IOException | InterruptedException ex) {
                 ex.printStackTrace();
             }
         }
 
-        public void login(String username, String password) {
+        public void login(String username, String password, DatagramPacket packet) {
             if (userAndPassword.containsKey(username)) {
+                password = CommonUtils.regular(password);
                 if (userAndPassword.get(username).equals(password)) {
                     this.username = username;
-                    socketMap.put(this.username, this.client);
+                    dataPacketMap.put(this.username, packet);
                     txtMsg.append(DateUtils.getNowTime() + " " + this.username + "成功登录进入系统\n");
 //                    System.out.println(this.username + "成功登录进入系统");
-                    sendMsg("欢迎" + this.username + "进入该系统", this.client);
+                    sendMsg("欢迎" + this.username + "进入该系统", packet);
                 } else {
-                    sendMsg("密码输入有误，请重新登录", this.client);
+                    System.out.println(userAndPassword.get(username));
+                    sendMsg("密码输入有误，请重新登录", packet);
                 }
             } else {
-                sendMsg("登录失败，请重新输入", this.client);
+                sendMsg("登录失败，请重新输入", packet);
             }
         }
 
-        private void register(String name, String password) {
+        private void register(String name, String password) throws InterruptedException {
             this.username = name;
+            password = CommonUtils.regular(password);
             userAndPassword.put(name, password);
-            socketMap.put(this.username, this.client);
+            dataPacketMap.put(this.username, this.packet);
             txtMsg.append(DateUtils.getNowTime() + " " + this.username + "注册进入系统\n");
 //            System.out.println(this.username + "注册进入系统");
-            sendMsg("欢迎" + this.username + "进入该系统", this.client);
+            sendMsg("欢迎" + this.username + "进入该系统", this.packet);
+            sendMsg(this.username + ":", this.packet);
         }
 
         private void groupChat(String msg) {
-            for (Map.Entry<String, Socket> tmp : socketMap.entrySet()) {
-                Socket socket = tmp.getValue();
-                if (socket == this.client) {
-                    continue;
-                }
-                sendMsg(this.username + ":" + msg, socket);
+            for (Map.Entry<String, DatagramPacket> tmp : dataPacketMap.entrySet()) {
+                DatagramPacket tmpValue = tmp.getValue();
+//                if (tmpValue.getAddress().getHostAddress() == this.packet.getAddress().getHostAddress()) {
+//                    System.out.println(1);
+//                    continue;
+//                }
+                sendMsg(msg, tmpValue);
             }
         }
 
-        private void sendMsg(String msg, Socket client) {
+        private void sendMsg(String msg, DatagramPacket datagramPacket) {
             try {
-                OutputStream out = client.getOutputStream();
-                BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(out));
-
-                bw.write(msg + "\n");
-                bw.flush();
+                byte[] tmp = msg.getBytes();
+                DatagramPacket sendPacket = new DatagramPacket(
+                        tmp,
+                        tmp.length,
+                        InetAddress.getByName(datagramPacket.getAddress().getHostAddress()), datagramPacket.getPort()
+                );
+                datagramSocket.send(sendPacket);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
 
+
+//    public void start() {
+//        try {
+//            DatagramSocket socket = new DatagramSocket(8081);
+//
+//            while (true) {
+//                byte[] msg = new byte[1024];
+//
+//                DatagramPacket dp = new DatagramPacket(msg, msg.length);
+//                socket.receive(dp);
+//
+//                String ip = dp.getAddress().getHostAddress();
+//                int port = dp.getPort();
+//
+//                String text = new String(dp.getData(), 0, dp.getLength());
+//                byte[] sendMsg = text.getBytes();
+//                DatagramPacket ds = new DatagramPacket(sendMsg, sendMsg.length, InetAddress.getByName(ip), port);
+//                socket.send(ds);
+//
+//                System.out.println("-----" + ip + "-------" + port + "-----" + text);
+//            }
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+//
+//
+//    }
 
 }
